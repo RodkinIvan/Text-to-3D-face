@@ -9,7 +9,7 @@ class FaceControlNet:
         self.prior_sketch = Image.open(prior_sketch_path).resize((512, 512))
     
     def __call__(self, *args: Any, **kwds: Any) -> Any:
-        return self.model(image=self.prior_sketch, *args, **kwds)
+        return self.model(*args, image=self.prior_sketch, **kwds)
 
 
 FaceControlNet()
