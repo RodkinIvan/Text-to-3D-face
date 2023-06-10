@@ -11,9 +11,9 @@ class FaceControlNet:
             diffusion_model_name="stabilityai/stable-diffusion-2-1",
             controlnet_model_name="lllyasviel/control_v11p_sd15_openpose",
             negative_prompt="low resolution, nsfw, ugly, duplicate",
-            strength=0.5,
+            # strength=0.5,
     ):  
-        self.strength = strength
+        # self.strength = strength
         controlnet = ControlNetModel.from_pretrained(
             controlnet_model_name, 
             torch_dtype=torch.float16,
@@ -36,7 +36,7 @@ class FaceControlNet:
             *args, 
             image=self.prior_sketch, 
             negative_prompt=self.negative_prompt, 
-            strength=self.strength,
+            # strength=self.strength,
             **kwds
         ).images
 
