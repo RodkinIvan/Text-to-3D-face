@@ -1,4 +1,4 @@
-from typing import Any
+from typing import Any, List
 from diffusers import ControlNetModel, StableDiffusionControlNetPipeline
 from PIL import Image
 import torch
@@ -30,7 +30,7 @@ class FaceControlNet:
         self.negative_prompt = [negative_prompt]
         self.prior_sketch = Image.fromarray(np.concatenate([image, image, image], axis=2))
     
-    def __call__(self, prompt, *args: Any, **kwds: Any) -> Any:
+    def __call__(self, prompt : List[str], *args: Any, **kwds: Any) -> List[Image.Image]:
         return self.model(
             prompt, 
             *args, 
