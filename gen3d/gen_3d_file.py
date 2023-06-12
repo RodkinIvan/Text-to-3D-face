@@ -8,8 +8,6 @@ import json
 import trimesh
 import matplotlib.pyplot as plt
 
-import gradio as gr
-
 AUTH_FORM = {
     'grant_type': 'client_credentials',
     'client_id': 'XXX',
