@@ -5,6 +5,7 @@ import time
 import io
 import zipfile
 import json
+import time
 import trimesh
 import matplotlib.pyplot as plt
 
@@ -98,12 +99,18 @@ def convert_3d_file(image_file):
         'pipeline': pipeline_type,
         'pipeline_subtype': pipeline_subtype,
         'resources': json.dumps(resources),
+        'export_parameters': json.dumps({
+            'format': 'glb'
+        })
     }
     files = {'photo': open(image_file, 'rb')}
     rsp = requests.post(
         'https://api.avatarsdk.com/avatars/',
         headers=headers, data=data, files=files
-    ).json()
+    )
+
+    rsp = rsp.json()
+    code = rsp['code']
 
     avatar_status_url = rsp['url']
 
@@ -111,23 +118,35 @@ def convert_3d_file(image_file):
         rsp = requests.get(avatar_status_url, headers=headers).json()
 
         if rsp['status'] == 'Completed':
-            print(rsp)
             break
 
         time.sleep(3)
 
+
+    rsp2 = requests.get(
+    'https://api.avatarsdk.com/avatars/',
+    headers=headers, data=data, files=files
+    )
+
+    rsp2 = rsp2.json()
+    while True:
+        rsp3 = requests.get(rsp2[0]['exports'], headers=headers).json()
+
+        if rsp3[0]['status'] == 'Completed':
+            break
+
+    export_id = rsp3[0]['code']
+    export_rsp = requests.get(f'https://api.avatarsdk.com/avatars/{code}/exports/{export_id}/files/avatar/file/', headers=headers)
+    with io.BytesIO(export_rsp.content) as zipmemory:
+        with zipfile.ZipFile(zipmemory) as archive:
+            archive.extractall()
+
     mesh = requests.get(rsp['mesh'], headers=headers)
     texture = requests.get(rsp['texture'], headers=headers)
 
-    with io.BytesIO(mesh.content) as zipmemory:
-        with zipfile.ZipFile(zipmemory) as archive:
-            model_file = archive.namelist()[0]
-            archive.extract(model_file)
-
     with open('model.jpg', 'wb') as texture_file:
         texture_file.write(texture.content)
-    mesh = trimesh.load_mesh(model_file)
-    mesh.show()
+
 
 if __name__ == '__main__':
     
