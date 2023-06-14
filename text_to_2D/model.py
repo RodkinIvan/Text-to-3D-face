@@ -9,7 +9,7 @@ class FaceControlNet:
             self,
             prior_sketch_path="text_to_2D/prior_sketches/mask.jpg",
             diffusion_model_name="runwayml/stable-diffusion-v1-5",
-            controlnet_model_name="lllyasviel/control_v11p_sd15_openpose",
+            controlnet_model_name="lllyasviel/sd-controlnet-scribble",
             negative_prompt="low resolution, nsfw, ugly, duplicate",
             # strength=0.5,
     ):  
