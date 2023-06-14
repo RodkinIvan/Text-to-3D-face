@@ -15,6 +15,7 @@ from annotator.pidinet import PidiNetDetector
 from annotator.util import nms
 from cldm.model import create_model, load_state_dict
 from cldm.ddim_hacked import DDIMSampler
+from gen_3d_file import convert_3d_file
 
 
 preprocessor = None
@@ -27,7 +28,7 @@ model = model.cuda()
 ddim_sampler = DDIMSampler(model)
 
 
-def process(prompt, input_image="image_prior.jpg", a_prompt='best quality', n_prompt='lowres, worst quality', num_samples=1, image_resolution=512, det='None', detect_resolution=512, ddim_steps=20, guess_mode=False, strength=1.0, scale=9.0, seed=42, eta=1.0):
+def process(prompt, input_image="image_prior.jpg", a_prompt='best quality', n_prompt='lowres, worst quality', num_samples=1, image_resolution=512, det='PIDI', detect_resolution=512, ddim_steps=20, guess_mode=False, strength=1.0, scale=9.0, seed=42, eta=1.0):
     global preprocessor
 
     if 'HED' in det:
@@ -53,10 +54,10 @@ def process(prompt, input_image="image_prior.jpg", a_prompt='best quality', n_pr
         H, W, C = img.shape
 
         detected_map = cv2.resize(detected_map, (W, H), interpolation=cv2.INTER_LINEAR)
-        #detected_map = nms(detected_map, 127, 3.0)
-        #detected_map = cv2.GaussianBlur(detected_map, (0, 0), 3.0)
-        #detected_map[detected_map > 4] = 255
-        #detected_map[detected_map < 255] = 0
+        detected_map = nms(detected_map, 127, 3.0)
+        detected_map = cv2.GaussianBlur(detected_map, (0, 0), 3.0)
+        detected_map[detected_map > 4] = 255
+        detected_map[detected_map < 255] = 0
 
         control = torch.from_numpy(detected_map.copy()).float().cuda() / 255.0
         control = torch.stack([control for _ in range(num_samples)], dim=0)
@@ -91,19 +92,24 @@ def process(prompt, input_image="image_prior.jpg", a_prompt='best quality', n_pr
         x_samples = (einops.rearrange(x_samples, 'b c h w -> b h w c') * 127.5 + 127.5).cpu().numpy().clip(0, 255).astype(np.uint8)
 
         results = [x_samples[i] for i in range(num_samples)]
+        cv2.imwrite("face.png", cv2.cvtColor(x_samples[0], cv2.COLOR_RGB2BGR))
     #return [detected_map] + results
     return results
 
+def process_2D_to_3D(image_path="face.png"):
+    convert_3d_file(image_path)
+    glb_path = "model.glb"
+    return glb_path
 
 block = gr.Blocks().queue()
 with block:
     with gr.Row():
-        gr.Markdown("## Generate 3d Avatar with Diffusion Models")
+        gr.Markdown("## Generate 3d Avatar")
     with gr.Row():
         with gr.Column():
             #input_image = gr.Image(source='upload', type="numpy")
             prompt = gr.Textbox(label="Prompt")
-            run_button = gr.Button(label="Run")
+            run_button = gr.Button(value="Run to generate an image with ControlNet")
             #num_samples = gr.Slider(label="Images", minimum=1, maximum=12, value=1, step=1)
             #seed = gr.Slider(label="Seed", minimum=-1, maximum=2147483647, step=1, value=12345)
             #det = gr.Radio(choices=["Scribble_HED", "Scribble_PIDI", "None"], type="value", value="Scribble_HED", label="Preprocessor")
@@ -117,12 +123,19 @@ with block:
                 #eta = gr.Slider(label="DDIM ETA", minimum=0.0, maximum=1.0, value=1.0, step=0.01)
                 #a_prompt = gr.Textbox(label="Added Prompt", value='best quality')
                 #n_prompt = gr.Textbox(label="Negative Prompt", value='lowres, bad anatomy, bad hands, cropped, worst quality')
-        with gr.Column():
             result_gallery = gr.Gallery(label='Output', show_label=False, elem_id="gallery").style(grid=1, height='auto')
-    with gr.Row():
-        demo = gr.Model3D(value="Duck.glb", clear_color=[0.0, 0.0, 0.0, 0.0], label="3D Model")
+            run_button_2D_to_3D = gr.Button(value="Run to render in 3D")
+            result_3d = gr.Model3D(clear_color=[0.0, 0.0, 0.0, 0.0], label="3D Model")
+        with gr.Column():
+            _ = gr.Textbox(label="Prompt")
+            #run_button = gr.Button(value="Run to generate an image with clip2latent")
+            #result_gallery = gr.Gallery(label='Output', show_label=False, elem_id="gallery").style(grid=1, height='auto')
+            #run_button_2D_to_3D = gr.Button(value="Run to render in 3D")
+            #result_3d = gr.Model3D(clear_color=[0.0, 0.0, 0.0, 0.0], label="3D Model")
+    
     ips = [prompt]
     run_button.click(fn=process, inputs=ips, outputs=[result_gallery])
+    run_button_2D_to_3D.click(fn=process_2D_to_3D, outputs=[result_3d])
 
 
 block.launch(server_name='0.0.0.0')
