@@ -6,8 +6,8 @@ import io
 import zipfile
 import json
 import time
-import trimesh
 import matplotlib.pyplot as plt
+import shutil
 
 AUTH_FORM = {
     'grant_type': 'client_credentials',
@@ -100,7 +100,8 @@ def convert_3d_file(image_file):
         'pipeline_subtype': pipeline_subtype,
         'resources': json.dumps(resources),
         'export_parameters': json.dumps({
-            'format': 'glb'
+            'format': 'glb',
+            'embed_textures': True,
         })
     }
     files = {'photo': open(image_file, 'rb')}
@@ -139,13 +140,12 @@ def convert_3d_file(image_file):
     export_rsp = requests.get(f'https://api.avatarsdk.com/avatars/{code}/exports/{export_id}/files/avatar/file/', headers=headers)
     with io.BytesIO(export_rsp.content) as zipmemory:
         with zipfile.ZipFile(zipmemory) as archive:
-            archive.extractall()
-
-    mesh = requests.get(rsp['mesh'], headers=headers)
-    texture = requests.get(rsp['texture'], headers=headers)
-
-    with open('model.jpg', 'wb') as texture_file:
-        texture_file.write(texture.content)
+            #archive.extractall()
+            for fileName in archive.namelist():
+                archive.extract(fileName)
+            shutil.move('avatar/model.glb', 'model.glb')
+            shutil.rmtree('avatar')
+            
 
 
 if __name__ == '__main__':
