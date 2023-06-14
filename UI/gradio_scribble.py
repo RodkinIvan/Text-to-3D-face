@@ -1,3 +1,5 @@
+import sys; sys.path.append('..')
+
 from share import *
 import config
 
@@ -15,7 +17,7 @@ from annotator.pidinet import PidiNetDetector
 from annotator.util import nms
 from cldm.model import create_model, load_state_dict
 from cldm.ddim_hacked import DDIMSampler
-from gen_3d_file import convert_3d_file
+from gen3d.gen_3d_file import convert_3d_file
 
 
 preprocessor = None
