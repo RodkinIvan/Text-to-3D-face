@@ -8,6 +8,7 @@ import json
 import time
 import matplotlib.pyplot as plt
 import shutil
+from pygltflib import GLTF2,Scene
 
 AUTH_FORM = {
     'grant_type': 'client_credentials',
@@ -72,6 +73,7 @@ def get_player_uid_header(headers):
 
 def convert_3d_file(image_file):
     headers = get_auth_header()
+
 
     headers.update(
         get_player_uid_header(headers)
@@ -145,7 +147,18 @@ def convert_3d_file(image_file):
                 archive.extract(fileName)
             shutil.move('avatar/model.glb', 'model.glb')
             shutil.rmtree('avatar')
-            
+
+    #Load glb file
+    gltf = GLTF2().load('model.glb')
+
+
+
+    # Apply rotation to the transformation matrices of the first node to rotate the model around y axis by 180 degrees
+    #Rotation vector in quaternion form [X,Y,Z,W] 
+    gltf.nodes[0].rotation = [0.,1.,0.,0.]
+
+    #Overwrite model
+    gltf.save('model.glb')
 
 
 if __name__ == '__main__':

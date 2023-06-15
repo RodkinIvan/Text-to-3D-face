@@ -3,3 +3,4 @@ pyglet==1.5.27
 requests
 scipy
 trimesh
+pygltflib
