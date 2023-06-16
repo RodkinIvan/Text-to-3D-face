@@ -10,7 +10,6 @@ dependencies:
   - torchvision=0.13.1
   - numpy=1.23.1
   - pip:
-      - gradio==3.16.2
       - albumentations==1.3.0
       - opencv-contrib-python==4.3.0.36
       - imageio==2.9.0
@@ -19,7 +18,6 @@ dependencies:
       - omegaconf==2.1.1
       - test-tube>=0.7.5
       - streamlit==1.12.1
-      - einops==0.3.0
       - transformers==4.19.2
       - webdataset==0.2.5
       - kornia==0.6
@@ -37,3 +35,18 @@ dependencies:
       - pycocotools
       - wandb
       - controlnet-v11-utils==0.1.0
+      - ninja==1.10.2.3
+      - dalle2-pytorch==0.2.38
+      - hydra-core==1.1.2
+      - typer==0.4.1
+      - joblib==1.1.1
+      - gradio==3.4
+      - protobuf==3.20.2
+      - scipy==1.9.1
+      - pytest
+      - clip2latent
+      - matplotlib
+      - pyglet==1.5.27
+      - requests
+      - trimesh
+      - pygltflib
