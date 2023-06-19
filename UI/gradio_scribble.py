@@ -20,8 +20,13 @@ from cldm.ddim_hacked import DDIMSampler
 from gen3d.gen_3d_file import convert_3d_file
 
 
-preprocessor = None
+from clip2latent import models
+from PIL import Image
+import os
 
+
+# controlnet
+preprocessor = None
 model_name = 'control_v11p_sd15_scribble'
 model = create_model(f'./models/{model_name}.yaml').cpu()
 model.load_state_dict(load_state_dict('./models/v1-5-pruned.ckpt', location='cuda'), strict=False)
@@ -29,8 +34,14 @@ model.load_state_dict(load_state_dict(f'./models/{model_name}.pth', location='cu
 model = model.cuda()
 ddim_sampler = DDIMSampler(model)
 
+# clip2latent
+device = 'cuda'
+checkpoint = 'https://huggingface.co/lambdalabs/clip2latent/resolve/main/ffhq-sg2-510.ckpt'
+cfg_file = 'https://huggingface.co/lambdalabs/clip2latent/resolve/main/ffhq-sg2-510.yaml'
+model_c2l = models.Clip2StyleGAN(cfg_file, device, checkpoint)
 
-def process(prompt, input_image="image_prior.jpg", a_prompt='best quality', n_prompt='lowres, worst quality', num_samples=1, image_resolution=512, det='PIDI', detect_resolution=512, ddim_steps=20, guess_mode=False, strength=1.0, scale=9.0, seed=42, eta=1.0):
+
+def infer_controlnet(prompt, input_image='image_prior.jpg', a_prompt='best quality', n_prompt='lowres, worst quality', num_samples=1, image_resolution=512, det='PIDI', detect_resolution=512, ddim_steps=20, guess_mode=False, strength=1.0, scale=9.0, seed=42, eta=1.0):
     global preprocessor
 
     if 'HED' in det:
@@ -72,8 +83,8 @@ def process(prompt, input_image="image_prior.jpg", a_prompt='best quality', n_pr
         if config.save_memory:
             model.low_vram_shift(is_diffusing=False)
 
-        cond = {"c_concat": [control], "c_crossattn": [model.get_learned_conditioning([prompt + ', ' + a_prompt] * num_samples)]}
-        un_cond = {"c_concat": None if guess_mode else [control], "c_crossattn": [model.get_learned_conditioning([n_prompt] * num_samples)]}
+        cond = {'c_concat': [control], 'c_crossattn': [model.get_learned_conditioning([prompt + ', ' + a_prompt] * num_samples)]}
+        un_cond = {'c_concat': None if guess_mode else [control], 'c_crossattn': [model.get_learned_conditioning([n_prompt] * num_samples)]}
         shape = (4, H // 8, W // 8)
 
         if config.save_memory:
@@ -94,50 +105,59 @@ def process(prompt, input_image="image_prior.jpg", a_prompt='best quality', n_pr
         x_samples = (einops.rearrange(x_samples, 'b c h w -> b h w c') * 127.5 + 127.5).cpu().numpy().clip(0, 255).astype(np.uint8)
 
         results = [x_samples[i] for i in range(num_samples)]
-        cv2.imwrite("face.png", cv2.cvtColor(x_samples[0], cv2.COLOR_RGB2BGR))
+        # save first image
+        cv2.imwrite('face_controlnet.png', cv2.cvtColor(x_samples[0], cv2.COLOR_RGB2BGR))
     #return [detected_map] + results
     return results
 
-def process_2D_to_3D(image_path="face.png"):
-    convert_3d_file(image_path)
-    glb_path = "model.glb"
+
+@torch.no_grad()
+def infer_c2l(prompt, n_samples=1, scale=2, skips=250):
+    images, clip_score = model_c2l(prompt, n_samples_per_txt=n_samples, cond_scale=scale, skips=skips, clip_sort=True)
+    images = images.cpu()
+    make_im = lambda x: (255*x.clamp(-1, 1)/2 + 127.5).to(torch.uint8).permute(1,2,0).numpy()
+    images = [Image.fromarray(make_im(x)) for x in images]
+    # save first image
+    images[0].save('face_c2l.png')
+    return images
+
+
+def process_2D_to_3D(image_path, extract_path=''):
+    convert_3d_file(image_path, extract_path)
+    glb_path = os.path.join(extract_path, 'avatar/model.glb')
     return glb_path
+
 
 block = gr.Blocks().queue()
 with block:
-    with gr.Row():
-        gr.Markdown("## Generate 3d Avatar")
+    title = 'Generate a 3D avatar from a text description'
+    gr.Markdown("<h1 style='text-align: center'>" + title + '</h1>')
+
     with gr.Row():
         with gr.Column():
-            #input_image = gr.Image(source='upload', type="numpy")
-            prompt = gr.Textbox(label="Prompt")
-            run_button = gr.Button(value="Run to generate an image with ControlNet")
-            #num_samples = gr.Slider(label="Images", minimum=1, maximum=12, value=1, step=1)
-            #seed = gr.Slider(label="Seed", minimum=-1, maximum=2147483647, step=1, value=12345)
-            #det = gr.Radio(choices=["Scribble_HED", "Scribble_PIDI", "None"], type="value", value="Scribble_HED", label="Preprocessor")
-            #with gr.Accordion("Advanced options", open=False):
-                #image_resolution = gr.Slider(label="Image Resolution", minimum=256, maximum=768, value=512, step=64)
-                #strength = gr.Slider(label="Control Strength", minimum=0.0, maximum=2.0, value=1.0, step=0.01)
-                #guess_mode = gr.Checkbox(label='Guess Mode', value=False)
-                #detect_resolution = gr.Slider(label="Preprocessor Resolution", minimum=128, maximum=1024, value=512, step=1)
-                #ddim_steps = gr.Slider(label="Steps", minimum=1, maximum=100, value=20, step=1)
-                #scale = gr.Slider(label="Guidance Scale", minimum=0.1, maximum=30.0, value=9.0, step=0.1)
-                #eta = gr.Slider(label="DDIM ETA", minimum=0.0, maximum=1.0, value=1.0, step=0.01)
-                #a_prompt = gr.Textbox(label="Added Prompt", value='best quality')
-                #n_prompt = gr.Textbox(label="Negative Prompt", value='lowres, bad anatomy, bad hands, cropped, worst quality')
-            result_gallery = gr.Gallery(label='Output', show_label=False, elem_id="gallery").style(grid=1, height='auto')
-            run_button_2D_to_3D = gr.Button(value="Run to render in 3D")
-            result_3d = gr.Model3D(clear_color=[0.0, 0.0, 0.0, 0.0], label="3D Model")
+            gr.Markdown('## ControlNet')
+            prompt_controlnet = gr.Textbox(label='Prompt')
+            run_button_controlnet = gr.Button(value='Run to generate an image with ControlNet')
+            result_gallery_controlnet = gr.Gallery(label='Output', show_label=False, elem_id='gallery').style(grid=1, height='auto')
+            run_button_2D_to_3D_controlnet = gr.Button(value='Run to render in 3D')
+            result_3d_controlnet = gr.Model3D(clear_color=[0.0, 0.0, 0.0, 0.0], label='3D Model')
         with gr.Column():
-            _ = gr.Textbox(label="Prompt")
-            #run_button = gr.Button(value="Run to generate an image with clip2latent")
-            #result_gallery = gr.Gallery(label='Output', show_label=False, elem_id="gallery").style(grid=1, height='auto')
-            #run_button_2D_to_3D = gr.Button(value="Run to render in 3D")
-            #result_3d = gr.Model3D(clear_color=[0.0, 0.0, 0.0, 0.0], label="3D Model")
+            gr.Markdown('## Clip2latent')
+            prompt_c2l = gr.Textbox(label='Prompt')
+            run_button_c2l = gr.Button(value='Run to generate an image with Clip2latent')
+            result_gallery_c2l = gr.Gallery(label='Output', show_label=False, elem_id='gallery').style(grid=1, height='auto')
+            run_button_2D_to_3D_c2l = gr.Button(value='Run to render in 3D')
+            result_3d_c2l = gr.Model3D(clear_color=[0.0, 0.0, 0.0, 0.0], label='3D Model')
     
-    ips = [prompt]
-    run_button.click(fn=process, inputs=ips, outputs=[result_gallery])
-    run_button_2D_to_3D.click(fn=process_2D_to_3D, outputs=[result_3d])
+    ips_controlnet = [prompt_controlnet]
+    ips_2D_to_3D_controlnet = [gr.Textbox(value='face_controlnet.png', visible=False), gr.Textbox(value='controlnet', visible=False)]
+    run_button_controlnet.click(fn=infer_controlnet, inputs=ips_controlnet, outputs=[result_gallery_controlnet])
+    run_button_2D_to_3D_controlnet.click(fn=process_2D_to_3D, inputs=ips_2D_to_3D_controlnet, outputs=[result_3d_controlnet])
+
+    ips_c2l = [prompt_c2l]
+    ips_2D_to_3D_c2l = [gr.Textbox(value='face_c2l.png', visible=False), gr.Textbox(value='c2l', visible=False)]
+    run_button_c2l.click(fn=infer_c2l, inputs=ips_c2l, outputs=[result_gallery_c2l])
+    run_button_2D_to_3D_c2l.click(fn=process_2D_to_3D, inputs=ips_2D_to_3D_c2l, outputs=[result_3d_c2l])
 
 
 block.launch(server_name='0.0.0.0')
