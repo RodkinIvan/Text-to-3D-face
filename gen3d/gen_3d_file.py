@@ -8,6 +8,7 @@ import json
 import time
 import matplotlib.pyplot as plt
 import shutil
+from pygltflib import GLTF2,Scene
 
 AUTH_FORM = {
     'grant_type': 'client_credentials',
@@ -70,8 +71,9 @@ def get_player_uid_header(headers):
     return {'X-PlayerUID': player_uid}
 
 
-def convert_3d_file(image_file):
+def convert_3d_file(image_file, extract_path=''):
     headers = get_auth_header()
+
 
     headers.update(
         get_player_uid_header(headers)
@@ -140,12 +142,18 @@ def convert_3d_file(image_file):
     export_rsp = requests.get(f'https://api.avatarsdk.com/avatars/{code}/exports/{export_id}/files/avatar/file/', headers=headers)
     with io.BytesIO(export_rsp.content) as zipmemory:
         with zipfile.ZipFile(zipmemory) as archive:
-            #archive.extractall()
-            for fileName in archive.namelist():
-                archive.extract(fileName)
-            shutil.move('avatar/model.glb', 'model.glb')
-            shutil.rmtree('avatar')
-            
+            # extract avatar foder to extract_path
+            archive.extractall(path=extract_path)
+
+    #Load glb file
+    gltf = GLTF2().load(os.path.join(extract_path, 'avatar/model.glb'))
+
+    # Apply rotation to the transformation matrices of the first node to rotate the model around y axis by 180 degrees
+    #Rotation vector in quaternion form [X,Y,Z,W] 
+    gltf.nodes[0].rotation = [0.,1.,0.,0.]
+
+    #Overwrite model
+    gltf.save(os.path.join(extract_path, 'avatar/model.glb'))
 
 
 if __name__ == '__main__':
