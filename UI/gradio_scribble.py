@@ -51,7 +51,7 @@ pipe.enable_model_cpu_offload()
 pipe.enable_xformers_memory_efficient_attention()
 
 
-def infer_controlnet(prompt, input_image='image_prior.jpg', a_prompt='best quality', n_prompt='lowres, worst quality', num_samples=1, image_resolution=512, det='PIDI', detect_resolution=512, ddim_steps=20, guess_mode=False, strength=1.0, scale=9.0, seed=42, eta=1.0):
+def infer_controlnet(prompt, input_image='image_prior.jpg', a_prompt='looking at the camera, ultra quality', n_prompt='worst quality, cartoon, anime, painting, b&w', num_samples=1, image_resolution=512, det='None', detect_resolution=512, ddim_steps=20, guess_mode=False, strength=1.0, scale=9.0, seed=42, eta=1.0):
     global preprocessor
 
     if 'HED' in det:
@@ -132,14 +132,14 @@ def infer_c2l(prompt, n_samples=1, scale=2, skips=250):
     return images
 
 
-def infer_ours(prompt, input_image='image_prior.jpg'):
-    prompt = [prompt + ', best quality, extremely detailed']
+def infer_ours(prompt, input_image='image_prior.jpg', a_prompt='looking at the camera, ultra quality', n_prompt='worst quality, cartoon, anime, painting, b&w'):
+    prompt = [prompt + ', ' + a_prompt]
     image = load_image(input_image)
     generator = [torch.Generator(device='cpu').manual_seed(42) for i in range(len(prompt))]
     output = pipe(
         prompt,
         image,
-        negative_prompt=['monochrome, lowres, bad anatomy, worst quality, low quality'],
+        negative_prompt=[n_prompt],
         num_inference_steps=20,
         generator=generator,
     )
@@ -162,23 +162,23 @@ with block:
         with gr.Column():
             gr.Markdown('## ControlNet')
             prompt_controlnet = gr.Textbox(label='Prompt')
-            run_button_controlnet = gr.Button(value='Run to generate an image with ControlNet')
+            run_button_controlnet = gr.Button(value='Generate portrait with ControlNet')
             result_gallery_controlnet = gr.Gallery(label='Output', show_label=False, elem_id='gallery').style(grid=1, height='auto')
-            run_button_2D_to_3D_controlnet = gr.Button(value='Run to render in 3D')
+            run_button_2D_to_3D_controlnet = gr.Button(value='Generate 3D avatar')
             result_3d_controlnet = gr.Model3D(clear_color=[0.0, 0.0, 0.0, 0.0], label='3D Model')
         with gr.Column():
             gr.Markdown('## Clip2latent')
             prompt_c2l = gr.Textbox(label='Prompt')
-            run_button_c2l = gr.Button(value='Run to generate an image with Clip2latent')
+            run_button_c2l = gr.Button(value='Generate portrait with Clip2latent')
             result_gallery_c2l = gr.Gallery(label='Output', show_label=False, elem_id='gallery').style(grid=1, height='auto')
-            run_button_2D_to_3D_c2l = gr.Button(value='Run to render in 3D')
+            run_button_2D_to_3D_c2l = gr.Button(value='Generate 3D avatar')
             result_3d_c2l = gr.Model3D(clear_color=[0.0, 0.0, 0.0, 0.0], label='3D Model')
         with gr.Column():
             gr.Markdown('## Ours')
             prompt_ours = gr.Textbox(label='Prompt')
-            run_button_ours = gr.Button(value='Run to generate an image with our method')
+            run_button_ours = gr.Button(value='Generate portrait with our method')
             result_gallery_ours = gr.Gallery(label='Output', show_label=False, elem_id='gallery').style(grid=1, height='auto')
-            run_button_2D_to_3D_ours = gr.Button(value='Run to render in 3D')
+            run_button_2D_to_3D_ours = gr.Button(value='Generate 3D avatar')
             result_3d_ours = gr.Model3D(clear_color=[0.0, 0.0, 0.0, 0.0], label='3D Model')
     
     ips_controlnet = [prompt_controlnet]
