@@ -19,10 +19,11 @@ from cldm.model import create_model, load_state_dict
 from cldm.ddim_hacked import DDIMSampler
 from gen3d.gen_3d_file import convert_3d_file
 
-
 from clip2latent import models
 from PIL import Image
 import os
+from diffusers import StableDiffusionControlNetPipeline, ControlNetModel, UniPCMultistepScheduler
+from diffusers.utils import load_image
 
 
 # controlnet
@@ -40,8 +41,17 @@ checkpoint = 'https://huggingface.co/lambdalabs/clip2latent/resolve/main/ffhq-sg
 cfg_file = 'https://huggingface.co/lambdalabs/clip2latent/resolve/main/ffhq-sg2-510.yaml'
 model_c2l = models.Clip2StyleGAN(cfg_file, device, checkpoint)
 
+# our controlnet
+controlnet = ControlNetModel.from_pretrained('irodkin/controlnet_celeba_with_llava_captions_ft', torch_dtype=torch.float16)
+pipe = StableDiffusionControlNetPipeline.from_pretrained(
+    'runwayml/stable-diffusion-v1-5', controlnet=controlnet, torch_dtype=torch.float16
+)
+pipe.scheduler = UniPCMultistepScheduler.from_config(pipe.scheduler.config)
+pipe.enable_model_cpu_offload()
+pipe.enable_xformers_memory_efficient_attention()
 
-def infer_controlnet(prompt, input_image='image_prior.jpg', a_prompt='best quality', n_prompt='lowres, worst quality', num_samples=1, image_resolution=512, det='PIDI', detect_resolution=512, ddim_steps=20, guess_mode=False, strength=1.0, scale=9.0, seed=42, eta=1.0):
+
+def infer_controlnet(prompt, input_image='image_prior.jpg', a_prompt='looking at the camera, ultra quality', n_prompt='worst quality, cartoon, anime, painting, b&w', num_samples=1, image_resolution=512, det='None', detect_resolution=512, ddim_steps=20, guess_mode=False, strength=1.0, scale=9.0, seed=42, eta=1.0):
     global preprocessor
 
     if 'HED' in det:
@@ -122,6 +132,21 @@ def infer_c2l(prompt, n_samples=1, scale=2, skips=250):
     return images
 
 
+def infer_ours(prompt, input_image='image_prior.jpg', a_prompt='looking at the camera, ultra quality', n_prompt='worst quality, cartoon, anime, painting, b&w'):
+    prompt = [prompt + ', ' + a_prompt]
+    image = load_image(input_image)
+    generator = [torch.Generator(device='cpu').manual_seed(42) for i in range(len(prompt))]
+    output = pipe(
+        prompt,
+        image,
+        negative_prompt=[n_prompt],
+        num_inference_steps=20,
+        generator=generator,
+    )
+    output.images[0].save('face_ours.png')
+    return output.images
+
+
 def process_2D_to_3D(image_path, extract_path=''):
     convert_3d_file(image_path, extract_path)
     glb_path = os.path.join(extract_path, 'avatar/model.glb')
@@ -137,17 +162,24 @@ with block:
         with gr.Column():
             gr.Markdown('## ControlNet')
             prompt_controlnet = gr.Textbox(label='Prompt')
-            run_button_controlnet = gr.Button(value='Run to generate an image with ControlNet')
+            run_button_controlnet = gr.Button(value='Generate portrait with ControlNet')
             result_gallery_controlnet = gr.Gallery(label='Output', show_label=False, elem_id='gallery').style(grid=1, height='auto')
-            run_button_2D_to_3D_controlnet = gr.Button(value='Run to render in 3D')
+            run_button_2D_to_3D_controlnet = gr.Button(value='Generate 3D avatar')
             result_3d_controlnet = gr.Model3D(clear_color=[0.0, 0.0, 0.0, 0.0], label='3D Model')
         with gr.Column():
             gr.Markdown('## Clip2latent')
             prompt_c2l = gr.Textbox(label='Prompt')
-            run_button_c2l = gr.Button(value='Run to generate an image with Clip2latent')
+            run_button_c2l = gr.Button(value='Generate portrait with Clip2latent')
             result_gallery_c2l = gr.Gallery(label='Output', show_label=False, elem_id='gallery').style(grid=1, height='auto')
-            run_button_2D_to_3D_c2l = gr.Button(value='Run to render in 3D')
+            run_button_2D_to_3D_c2l = gr.Button(value='Generate 3D avatar')
             result_3d_c2l = gr.Model3D(clear_color=[0.0, 0.0, 0.0, 0.0], label='3D Model')
+        with gr.Column():
+            gr.Markdown('## Ours')
+            prompt_ours = gr.Textbox(label='Prompt')
+            run_button_ours = gr.Button(value='Generate portrait with our method')
+            result_gallery_ours = gr.Gallery(label='Output', show_label=False, elem_id='gallery').style(grid=1, height='auto')
+            run_button_2D_to_3D_ours = gr.Button(value='Generate 3D avatar')
+            result_3d_ours = gr.Model3D(clear_color=[0.0, 0.0, 0.0, 0.0], label='3D Model')
     
     ips_controlnet = [prompt_controlnet]
     ips_2D_to_3D_controlnet = [gr.Textbox(value='face_controlnet.png', visible=False), gr.Textbox(value='controlnet', visible=False)]
@@ -158,6 +190,11 @@ with block:
     ips_2D_to_3D_c2l = [gr.Textbox(value='face_c2l.png', visible=False), gr.Textbox(value='c2l', visible=False)]
     run_button_c2l.click(fn=infer_c2l, inputs=ips_c2l, outputs=[result_gallery_c2l])
     run_button_2D_to_3D_c2l.click(fn=process_2D_to_3D, inputs=ips_2D_to_3D_c2l, outputs=[result_3d_c2l])
+
+    ips_ours = [prompt_ours]
+    ips_2D_to_3D_ours = [gr.Textbox(value='face_ours.png', visible=False), gr.Textbox(value='ours', visible=False)]
+    run_button_ours.click(fn=infer_ours, inputs=ips_ours, outputs=[result_gallery_ours])
+    run_button_2D_to_3D_ours.click(fn=process_2D_to_3D, inputs=ips_2D_to_3D_ours, outputs=[result_3d_ours])
 
 
 block.launch(server_name='0.0.0.0')
