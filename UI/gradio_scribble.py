@@ -22,7 +22,7 @@ from gen3d.gen_3d_file import convert_3d_file
 from clip2latent import models
 from PIL import Image
 import os
-from diffusers import StableDiffusionControlNetPipeline, ControlNetModel, UniPCMultistepScheduler
+from diffusers import StableDiffusionControlNetPipeline, ControlNetModel, UniPCMultistepScheduler, StableDiffusionXLPipeline
 from diffusers.utils import load_image
 
 
@@ -37,6 +37,7 @@ ddim_sampler = DDIMSampler(model)
 
 # clip2latent
 device = 'cuda'
+device_sdxl = 'cuda:1'
 checkpoint = 'https://huggingface.co/lambdalabs/clip2latent/resolve/main/ffhq-sg2-510.ckpt'
 cfg_file = 'https://huggingface.co/lambdalabs/clip2latent/resolve/main/ffhq-sg2-510.yaml'
 model_c2l = models.Clip2StyleGAN(cfg_file, device, checkpoint)
@@ -49,6 +50,10 @@ pipe = StableDiffusionControlNetPipeline.from_pretrained(
 pipe.scheduler = UniPCMultistepScheduler.from_config(pipe.scheduler.config)
 pipe.enable_model_cpu_offload()
 pipe.enable_xformers_memory_efficient_attention()
+
+sdxl = StableDiffusionXLPipeline.from_pretrained(
+    "stabilityai/stable-diffusion-xl-base-0.9", torch_dtype=torch.float16, variant="fp16", use_safetensors=True
+).to(device_sdxl)
 
 
 def infer_controlnet(prompt, input_image='image_prior.jpg', a_prompt='looking at the camera, ultra quality', n_prompt='worst quality, cartoon, anime, painting, b&w', num_samples=1, image_resolution=512, det='None', detect_resolution=512, ddim_steps=20, guess_mode=False, strength=1.0, scale=9.0, seed=42, eta=1.0):
@@ -146,6 +151,18 @@ def infer_ours(prompt, input_image='image_prior.jpg', a_prompt='looking at the c
     output.images[0].save('face_ours.png')
     return output.images
 
+def infer_sdxl(prompt, a_prompt='looking at the camera, ultra quality', n_prompt='worst quality, cartoon, anime, painting, b&w'):
+    prompt = [prompt + ', ' + a_prompt]
+    generator = [torch.Generator(device='cpu').manual_seed(42) for i in range(len(prompt))]
+    output = sdxl(
+        prompt,
+        negative_prompt=[n_prompt],
+        num_inference_steps=20,
+        generator=generator,
+    )
+    output.images[0].save('face_sdxl.png')
+    return output.images
+
 
 def process_2D_to_3D(image_path, extract_path=''):
     convert_3d_file(image_path, extract_path)
@@ -180,6 +197,13 @@ with block:
             result_gallery_ours = gr.Gallery(label='Output', show_label=False, elem_id='gallery').style(grid=1, height='auto')
             run_button_2D_to_3D_ours = gr.Button(value='Generate 3D avatar')
             result_3d_ours = gr.Model3D(clear_color=[0.0, 0.0, 0.0, 0.0], label='3D Model')
+        with gr.Column():
+            gr.Markdown('## SDXL')
+            prompt_sdxl = gr.Textbox(label='Prompt')
+            run_button_sdxl = gr.Button(value='Generate portrait with SDXL')
+            result_gallery_sdxl = gr.Gallery(label='Output', show_label=False, elem_id='gallery').style(grid=1, height='auto')
+            run_button_2D_to_3D_sdxl = gr.Button(value='Generate 3D avatar')
+            result_3d_sdxl = gr.Model3D(clear_color=[0.0, 0.0, 0.0, 0.0], label='3D Model')
     
     ips_controlnet = [prompt_controlnet]
     ips_2D_to_3D_controlnet = [gr.Textbox(value='face_controlnet.png', visible=False), gr.Textbox(value='controlnet', visible=False)]
@@ -196,5 +220,9 @@ with block:
     run_button_ours.click(fn=infer_ours, inputs=ips_ours, outputs=[result_gallery_ours])
     run_button_2D_to_3D_ours.click(fn=process_2D_to_3D, inputs=ips_2D_to_3D_ours, outputs=[result_3d_ours])
 
+    ips_sdxl = [prompt_sdxl]
+    ips_2D_to_3D_sdxl = [gr.Textbox(value='face_sdxl.png', visible=False), gr.Textbox(value='sdxl', visible=False)]
+    run_button_sdxl.click(fn=infer_sdxl, inputs=ips_sdxl, outputs=[result_gallery_sdxl])
+    run_button_2D_to_3D_sdxl.click(fn=process_2D_to_3D, inputs=ips_2D_to_3D_ours, outputs=[result_3d_ours])
 
-block.launch(server_name='0.0.0.0')
+block.launch(server_name='0.0.0.0', share=True)
